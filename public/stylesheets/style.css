@@ -1,0 +1,105 @@
+/* Existing styles */
+body {
+  padding: 50px;
+  font: 14px "Lucida Grande", Helvetica, Arial, sans-serif;
+}
+
+a {
+  color: #00B7FF;
+}
+.upload-container {
+  margin: 0 auto;
+  padding-top: 20px;  /* Adjust this value as needed */
+  max-width: 300px;  /* Adjust this value based on your design */
+}
+
+.uploaded-images-bar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 10px;
+}
+
+
+.uploaded-images-bar img {
+  max-width: 100%;
+  height: 200px;
+  object-fit: cover;
+  padding: 20px; /* Padding to give some space around the images */
+  background: linear-gradient(135deg, #f5f7fa 0%, #e4e9ee 100%); /* A subtle gradient */
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1); /* Adds a light shadow for depth */
+  border-radius: 10px; /* Slight rounded corners for a modern look */
+  margin: auto;
+}
+
+.uploaded-images-bar .col {
+  padding: 0 10px; /* Add some padding around each image */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+body, html {
+  height: 100%;
+}
+
+.full-height {
+  min-height: 100%;
+  padding: 30px;  /* Adjust the 100px to increase or decrease the side padding */
+}
+.container-fluid {
+  max-width: 80%;  /* Adjust this percentage as needed */
+}
+
+/* For the form */
+.resize-options {
+  /* Adds some space around the form */
+  padding: 20px 20px 40px;
+  background: linear-gradient(135deg, #f5f7fa 0%, #e4e9ee 100%); /* A subtle gradient */
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1); /* Adds a light shadow for depth */
+  border-radius: 10px; /* Slight rounded corners for a modern look */
+}
+
+/* For the image container */
+.image-container {
+  width: 100%;
+  height: 100%; /* Adjust to your desired height */
+  max-height: 470px;
+  background: linear-gradient(135deg, #f5f7fa 0%, #e4e9ee 100%);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+  display: flex;
+  align-items: center; /* Vertically centers the image in the container */
+  justify-content: center; /* Horizontally centers the image in the container */
+  margin: 0px auto; /* Gives space on top and bottom */
+  padding: 20px; /* Adds some space around the container */
+  overflow: hidden; /* In case the image exceeds the container size */
+}
+
+/* Adjusting the image styles */
+.img-fluid.mb-3 {
+  max-width: 100%; /* Ensures it won't exceed the container */
+  max-height: 100%; /* Ensures it won't exceed the container */
+  display: block;
+  margin: 0 auto;
+}
+
+
+
+.col-md-6 {
+  padding-left: 10px !important;
+}
+
+.navbar-bg {
+  background-color: #007BFF; /* Bootstrap primary blue */
+  width: 100%; /* Stretch across the top */
+  padding: 10px !important;/* Vertical padding of 10px and horizontal padding of 30px */
+  position: fixed; /* Keep it at the top */
+  top: 0; /* Position at the top */
+  left: 0; /* Start from the leftmost side */
+  z-index: 1000; /* Ensure it's above other content */
+}
+
+.navbar-bg h1, .navbar-bg a {
+  color: white; /* Text in white */
+}
