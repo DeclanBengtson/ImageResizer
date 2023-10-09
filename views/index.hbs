@@ -1,73 +1,93 @@
+<!-- Main container -->
 <div class="container-fluid full-height">
     <div class="row">
         <div class="col mx-auto">
+
+            <!-- Row for the current image and resize settings -->
             <div class="row" style="padding-top: 2%">
 
-                <!-- Current Image -->
+                <!-- Current Image Section -->
                 <div class="col-md-6 no-left-padding">
                     <div class="image-container">
+                        <!-- Loop over uploaded images and display only the last uploaded image -->
                         {{#each uploadedImages as |image index|}}
                             {{#if @last}}
                                 <img src="{{image}}" class="img-fluid mb-3" alt="Latest Uploaded Image">
                             {{/if}}
                         {{/each}}
                     </div>
-
                 </div>
 
-                <!-- Resize Adjustment Settings -->
+                <!-- Resize Adjustment Settings Section -->
                 <div class="col-md-6">
-                        <form action="/resize" method="post" enctype="multipart/form-data" class="resize-options">
-                            <!-- Current uploaded image as hidden field to reference in the resize route -->
-                            <input type="hidden" name="currentImage" value="{{resizedImage}}">
+                    <!-- Form to post resize settings and the image to resize -->
+                    <form action="/resize" method="post" enctype="multipart/form-data" class="resize-options">
 
-                            <div class="form-group">
-                                <label for="width">Width:</label>
-                                <input type="number" name="width" class="form-control" id="width" placeholder="Width in pixels" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="height">Height:</label>
-                                <input type="number" name="height" class="form-control" id="height" placeholder="Height in pixels" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="aspectRatio">Maintain Aspect Ratio:</label>
-                                <input type="checkbox" name="maintainAspectRatio" id="maintainAspectRatio">
-                            </div>
-                            <div class="form-group">
-                                <label for="format">Format:</label>
-                                <select class="form-control" name="imageType" id="imageType">
-                                    <option value="jpg">JPG</option>
-                                    <option value="png">PNG</option>
-                                    <option value="gif">GIF</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label for="quality">Quality:</label>
-                                <input type="range" name="imageQuality" min="0" max="100" step="1" id="imageQuality" value="5" class="form-control-range">
-                            </div>
-                            <input type="file" name="image" accept="image/*">
-                            <label for="aspectRatio">Download</label>
-                            <input type="checkbox" name="download" id="download">
-                            <button type="submit" class="btn btn-primary">Resize</button>
-                        </form>
+                        <!-- Hidden input to hold the current resized image path -->
+                        <input type="hidden" name="currentImage" value="{{resizedImage}}">
 
-                    <!-- If there's an error during resizing -->
+                        <!-- Width input -->
+                        <div class="form-group">
+                            <label for="width">Width:</label>
+                            <input type="number" name="width" class="form-control" id="width" placeholder="Width in pixels" required>
+                        </div>
+
+                        <!-- Height input -->
+                        <div class="form-group">
+                            <label for="height">Height:</label>
+                            <input type="number" name="height" class="form-control" id="height" placeholder="Height in pixels" required>
+                        </div>
+
+                        <!-- Checkbox to decide if the aspect ratio should be maintained -->
+                        <div class="form-group">
+                            <label for="aspectRatio">Maintain Aspect Ratio:</label>
+                            <input type="checkbox" name="maintainAspectRatio" id="maintainAspectRatio">
+                        </div>
+
+                        <!-- Image format dropdown selection -->
+                        <div class="form-group">
+                            <label for="format">Format:</label>
+                            <select class="form-control" name="imageType" id="imageType">
+                                <option value="jpeg">JPG</option>
+                                <option value="png">PNG</option>
+                                <option value="gif">GIF</option>
+                            </select>
+                        </div>
+
+                        <!-- Image quality slider input -->
+                        <div class="form-group">
+                            <label for="quality">Quality:</label>
+                            <input type="range" name="imageQuality" min="0" max="100" step="1" id="imageQuality" value="100" class="form-control-range">
+                        </div>
+
+                        <!-- Input to choose the image file to upload and resize -->
+                        <input type="file" name="image" accept="image/*">
+
+                        <!-- Checkbox to decide if the image should be downloaded after resizing -->
+                        <label for="aspectRatio">Download</label>
+                        <input type="checkbox" name="download" id="download">
+
+                        <!-- Button to submit the form and initiate the resize process -->
+                        <button type="submit" class="btn btn-primary">Resize</button>
+                    </form>
+
+                    <!-- Display an error message if there's an error during resizing -->
                     {{#if error}}
                         <p>{{error}}</p>
                     {{/if}}
                 </div>
             </div>
 
-            <!-- Uploaded images bar -->
+            <!-- Display bar for previously uploaded images -->
             <h2 style="text-align: center; margin-top: 2%">Previous Uploads</h2>
             <div style="margin-top: 2%" class="row uploaded-images-bar">
+                <!-- Loop over and display each uploaded image -->
                 {{#each uploadedImages}}
-                        <div class="col">
-                            <img src="{{this}}" alt="Uploaded Image {{@index}}" class="img-fluid">
-                        </div>
+                    <div class="col">
+                        <img src="{{this}}" alt="Uploaded Image {{@index}}" class="img-fluid">
+                    </div>
                 {{/each}}
             </div>
-
         </div>
     </div>
 </div>

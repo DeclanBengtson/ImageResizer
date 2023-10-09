@@ -1,17 +1,32 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <!-- Dynamic title based on the template data -->
     <title>{{title}}</title>
+
+    <!-- Local stylesheet for custom styles -->
     <link rel='stylesheet' href='../stylesheets/style.css' />
+
+    <!-- Link to the Bootstrap CSS framework for styling -->
     <link href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- jQuery library for scripting and interactivity -->
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+
+    <!-- Popper.js library for Bootstrap tooltips and popovers -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.16.0/umd/popper.min.js"></script>
+
+    <!-- Bootstrap JavaScript for component functionality -->
     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
 </head>
 <body>
+
 <!-- Navigation Bar -->
 <div class="d-flex justify-content-between align-items-center mb-3 navbar-bg">
+    <!-- Application title -->
     <h1 style="padding-left: 12.1%">Cloud Resizer</h1>
+
+    <!-- Navigation links -->
     <div class="d-flex" style="padding-right: 12.5%">
         <a href="#" class="mr-3">Hide up</a>
         <a href="#" class="mr-3">Previous</a>
@@ -20,6 +35,8 @@
 </div>
 <!-- End of Navigation Bar -->
 
+<!-- Body content dynamically injected from the rendered view -->
 {{{body}}}
+
 </body>
 </html>
