@@ -16,7 +16,7 @@ router.get('/', function(req, res, next) {
 
   // Render the home page with title and uploaded images
   res.render('index', {
-    title: 'Express',
+    title: 'Cloud Resizer',
     uploadedImages: req.session.uploadedImages,
   });
 });
