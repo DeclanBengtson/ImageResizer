@@ -12,7 +12,10 @@ require('dotenv').config();
 
 // Configure AWS SDK
 AWS.config.getCredentials(function (err) {
-  if (err) console.log(err.stack);
+  if (err) {
+    console.log(err.stack);
+    console.log("Error with credentials");
+  }
   // credentials not loaded
   else {
     console.log("Access key:", AWS.config.credentials.accessKeyId);
@@ -20,8 +23,8 @@ AWS.config.getCredentials(function (err) {
   }
 });
 
+const bucketName = 'n11079550bucket';
 const s3 = new AWS.S3({ apiVersion: "2006-03-01" });
-const bucketName = 'bucket-name';
 
 (async () => {
   try {
@@ -43,6 +46,7 @@ const client = redis.createClient();
     console.log(err);
   }
 })();
+
 // Middleware to cache the resized image
 const cacheMiddleware = async (req, res, next) => {
   const cacheKey = `${req.body.width}-${req.body.height}-${req.file.originalname}`;
@@ -120,24 +124,26 @@ router.post('/resize', upload.single('image'), async function(req, res) {
 
     if (download) {
       let params = {
-        Bucket: 'your-s3-bucket-name',
+        Bucket: bucketName,
         Key: 'resized-images/' + req.file.originalname,
         Body: outputBuffer,
         ContentType: 'image/' + imageType
       };
 
       let uploadResult = await s3.upload(params).promise();
+      console.log(uploadResult);
+
       let s3ImageUrl = uploadResult.Location;
 
 
       // Set headers and send the resized image as a downloadable file
       res.setHeader('Content-Disposition', 'attachment; filename=resized-image.' + imageType);
       res.setHeader('Content-Type', req.file.mimetype);
-      res.end(outputBuffer);
+      return res.end(outputBuffer);
     } else {
       // Otherwise, render the page with the resized image (encoded in Base64 format)
       let outputBase64 = `data:image/${imageType};base64,` + outputBuffer.toString('base64');
-      res.render('index', {
+      return res.render('index', {
         title: 'Cloud Resizer',
         resizedImage: outputBase64,
         uploadedImages: req.session.uploadedImages
