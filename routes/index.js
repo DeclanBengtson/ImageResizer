@@ -145,7 +145,7 @@ router.post('/resize', upload.single('image'), async function(req, res) {
     }
 
     // Store the resized image in Redis cache
-    client.setex(cacheKey, 3600, outputBuffer.toString('base64'));
+    client.setEx(cacheKey, 3600, outputBuffer.toString('base64'));
 
   } catch (error) {
     // In case of errors, render the home page with an error message
