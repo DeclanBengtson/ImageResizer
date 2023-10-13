@@ -1,11 +1,59 @@
-var express = require('express');
-const sharp = require('sharp');  // Image processing library
-const multer = require('multer');  // Middleware for handling multipart/form-data (file uploads)
-const storage = multer.memoryStorage(); // Configuring multer to store uploaded files in memory
-const upload = multer({ storage: storage });  // Initialize multer with memory storage
-const fs = require('fs').promises;  // File system promises API for asynchronous file operations
+const express = require('express');
+const sharp = require('sharp');
+const multer = require('multer');
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
+const fs = require('fs').promises;
+const AWS = require('aws-sdk');
+const redis = require('redis');
+require('dotenv').config();
+const router = express.Router();
 
-var router = express.Router();  // Create a new router object
+// Configure AWS SDK
+AWS.config.getCredentials(function (err) {
+  if (err) console.log(err.stack);
+  // credentials not loaded
+  else {
+    console.log("Access key:", AWS.config.credentials.accessKeyId);
+    console.log("Secret access key:", AWS.config.credentials.secretAccessKey);
+  }
+});
+
+const s3 = new AWS.S3({ apiVersion: "2006-03-01" });
+
+(async () => {
+  try {
+    await s3.createBucket({ Bucket: bucketName }).promise();
+    console.log(`Created bucket: ${bucketName}`);
+  } catch (err) {
+    // We will ignore 409 errors which indicate that the bucket already exists
+    if (err.statusCode !== 409) {
+      console.log(`Error creating bucket: ${err}`);
+    }
+  }
+})();
+
+const client = redis.createClient();
+(async () => {
+  try {
+    await  redisClient.connect();  
+  } catch (err) {
+    console.log(err);
+  }
+})();
+// Middleware to cache the resized image
+const cacheMiddleware = async (req, res, next) => {
+  const cacheKey = `${req.body.width}-${req.body.height}-${req.file.originalname}`;
+  client.get(cacheKey, async (err, cachedImage) => {
+    if (err) throw err;
+    if (cachedImage) {
+      res.setHeader('Content-Type', 'image/' + (req.body.imageType || 'jpeg'));
+      res.end(Buffer.from(cachedImage, 'base64'));
+    } else {
+      next();
+    }
+  });
+};
 
 /* Endpoint to render the home page */
 router.get('/', function(req, res, next) {
@@ -69,6 +117,17 @@ router.post('/resize', upload.single('image'), async function(req, res) {
     let download = req.body.download === 'on';
 
     if (download) {
+      let params = {
+        Bucket: 'your-s3-bucket-name',
+        Key: 'resized-images/' + req.file.originalname,
+        Body: outputBuffer,
+        ContentType: 'image/' + imageType
+      };
+
+      let uploadResult = await s3.upload(params).promise();
+      let s3ImageUrl = uploadResult.Location;
+
+
       // Set headers and send the resized image as a downloadable file
       res.setHeader('Content-Disposition', 'attachment; filename=resized-image.' + imageType);
       res.setHeader('Content-Type', req.file.mimetype);
@@ -83,6 +142,9 @@ router.post('/resize', upload.single('image'), async function(req, res) {
       });
     }
 
+    // Store the resized image in Redis cache
+    client.setex(cacheKey, 3600, outputBuffer.toString('base64'));
+    
   } catch (error) {
     // In case of errors, render the home page with an error message
     res.render('index', {
