@@ -21,6 +21,7 @@ AWS.config.getCredentials(function (err) {
 });
 
 const s3 = new AWS.S3({ apiVersion: "2006-03-01" });
+const bucketName = 'bucket-name';
 
 (async () => {
   try {
