@@ -9,12 +9,11 @@
                 <!-- Current Image Section -->
                 <div class="col-md-6 no-left-padding">
                     <div class="image-container">
-                        <!-- Loop over uploaded images and display only the last uploaded image -->
-                        {{#each uploadedImages as |image index|}}
-                            {{#if @last}}
-                                <img src="{{image}}" class="img-fluid mb-3" alt="Latest Uploaded Image">
-                            {{/if}}
-                        {{/each}}
+                        {{#if resizedImage}}
+                            <img src="{{resizedImage}}" class="img-fluid mb-3" alt="Resized Image">
+                        {{else}}
+                            <img src="/images/placeholder.jpg" class="img-fluid mb-3" alt="Fetching image...">
+                        {{/if}}
                     </div>
                 </div>
 
@@ -34,7 +33,7 @@
 
                         <!-- Height input -->
                         <div class="form-group">
-                            <label for="height">Height:</label>
+                            <label for "height">Height:</label>
                             <input type="number" name="height" class="form-control" id="height" placeholder="Height in pixels" required>
                         </div>
 
