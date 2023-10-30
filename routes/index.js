@@ -10,17 +10,11 @@ const router = express.Router();
 
 require('dotenv').config();
 
-// Configure AWS SDK
-AWS.config.getCredentials(function (err) {
-  if (err) {
-    console.log(err.stack);
-    console.log("Error with credentials");
-  }
-  // credentials not loaded
-  else {
-    console.log("Access key:", AWS.config.credentials.accessKeyId);
-    console.log("Secret access key:", AWS.config.credentials.secretAccessKey);
-  }
+AWS.config.update({
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  sessionToken: process.env.AWS_SESSION_TOKEN,
+  region: "ap-southeast-2",
 });
 
 const bucketName = 'n11079550bucket';
@@ -48,17 +42,53 @@ const client = redis.createClient();
 })();
 
 /* Endpoint to render the home page */
-router.get('/', function(req, res, next) {
-  // If the session doesn't have uploaded images, initialize with a default image
-  if (!req.session.uploadedImages) {
-    req.session.uploadedImages = ['../images/default.jpg'];
-  }
+router.get('/', async function(req, res, next) {
+  try {
+    // If the session doesn't have uploaded images, initialize with a default image
+    if (!req.session.uploadedImages) {
+      req.session.uploadedImages = ['../images/default.jpg'];
+    }
 
-  // Render the home page with title and uploaded images
-  res.render('index', {
-    title: 'Cloud Resizer',
-    uploadedImages: req.session.uploadedImages,
-  });
+    const uploadedImages = req.session.uploadedImages;
+
+    // Check if the uploaded images are in Redis
+    const redisImages = await Promise.all(
+      uploadedImages.map(async (imagePath) => {
+        const cacheKey = `resize-${imagePath}`;
+        const redisImage = await client.get(cacheKey);
+        return { imagePath, redisImage };
+      })
+    );
+
+    // Check if the uploaded images are in S3
+    const s3Images = await Promise.all(
+      uploadedImages.map(async (imagePath) => {
+        const key = `resized-images/${path.basename(imagePath)}`;
+        try {
+          const s3Object = await s3.getObject({ Bucket: bucketName, Key: key }).promise();
+          return { imagePath, s3Image: s3Object.Body };
+        } catch (err) {
+          // Ignore errors if the image is not found in S3
+          return null;
+        }
+      })
+    );
+
+    // Render the home page with title and uploaded images
+    res.render('index', {
+      title: 'Cloud Resizer',
+      uploadedImages,
+      redisImages,
+      s3Images,
+    });
+  } catch (error) {
+    // Handle errors as needed
+    console.error(error);
+    res.render('index', {
+      title: 'Cloud Resizer',
+      error: error.message,
+    });
+  }
 });
 
 /* Endpoint to resize the uploaded image */
@@ -132,11 +162,9 @@ router.post('/resize', upload.single('image'), async function(req, res) {
       return new AWS.S3().getObject(params, (err, result) => {
         if (result) {
           console.log(`Found in S3`);
-          const forUpload = JSON.parse(outputBuffer.toString('base64')); // copy JSON object and overwrite source to Redis Cache
-          forUpload.source = 'Redis Cache';
           // upload to redis cache
           redisClient.setEx(redisKey, 3600, outputBuffer.toString('base64'));
-          console.log(`result for query ${query} stored in Redis cache`);
+          console.log(`Stored in Redis cache`);
           res.setHeader('Content-Disposition', 'attachment; filename=resized-image.' + imageType);
           res.setHeader('Content-Type', req.file.mimetype);
           return res.end(outputBuffer);
