@@ -44,7 +44,7 @@ const client = redis.createClient();
 router.get('/', function(req, res, next) {
   // If session does not have uploadedImages, initialize with default image
   if (!req.session.uploadedImages) {
-    req.session.uploadedImages = ['../images/default.png'];
+    req.session.uploadedImages = ['../images/default.jpg'];
     console.log("default");
   }
 
