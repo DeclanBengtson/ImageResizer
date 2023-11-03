@@ -41,61 +41,24 @@ const client = redis.createClient();
   }
 })();
 
-/* Endpoint to render the home page */
-router.get('/', async function(req, res, next) {
-  try {
-    // If the session doesn't have uploaded images, initialize with a default image
-    if (!req.session.uploadedImages) {
-      req.session.uploadedImages = ['../images/default.jpg'];
-    }
-
-    const uploadedImages = req.session.uploadedImages;
-
-    // Check if the uploaded images are in Redis
-    const redisImages = await Promise.all(
-      uploadedImages.map(async (imagePath) => {
-        const cacheKey = `resize-${imagePath}`;
-        const redisImage = await client.get(cacheKey);
-        return { imagePath, redisImage };
-      })
-    );
-
-    // Check if the uploaded images are in S3
-    const s3Images = await Promise.all(
-      uploadedImages.map(async (imagePath) => {
-        const key = `resized-images/${path.basename(imagePath)}`;
-        try {
-          const s3Object = await s3.getObject({ Bucket: bucketName, Key: key }).promise();
-          return { imagePath, s3Image: s3Object.Body };
-        } catch (err) {
-          // Ignore errors if the image is not found in S3
-          return null;
-        }
-      })
-    );
-
-    // Render the home page with title and uploaded images
-    res.render('index', {
-      title: 'Cloud Resizer',
-      uploadedImages,
-      redisImages,
-      s3Images,
-    });
-  } catch (error) {
-    // Handle errors as needed
-    console.error(error);
-    res.render('index', {
-      title: 'Cloud Resizer',
-      error: error.message,
-    });
+router.get('/', function(req, res, next) {
+  // If session does not have uploadedImages, initialize with default image
+  if (!req.session.uploadedImages) {
+    req.session.uploadedImages = ['../images/default.png'];
+    console.log("default");
   }
+
+  res.render('index', {
+    title: 'Express',
+    uploadedImages: req.session.uploadedImages,
+  });
 });
 
 /* Endpoint to resize the uploaded image */
 router.post('/resize', upload.single('image'), async function(req, res) {
   try {
     // If the session contains the default image, remove it before adding new images
-    if (req.session.uploadedImages && req.session.uploadedImages[0] === '../images/default.jpg') {
+    if (req.session.uploadedImages && req.session.uploadedImages[0] === '../images/default.png') {
       req.session.uploadedImages.shift();
     }
 
@@ -199,6 +162,56 @@ router.post('/resize', upload.single('image'), async function(req, res) {
     });
   }
 });
+
+const { promisify } = require('util');
+const redisGetAsync = promisify(client.get).bind(client);
+
+// Add this route handler for downloading images
+router.get('/download/:index', async function(req, res) {
+  try {
+    const index = parseInt(req.params.index);
+
+    if (req.session.uploadedImages && index >= 0 && index < req.session.uploadedImages.length) {
+      const cacheKey = `image-${index}`;
+      const imageFromRedis = await redisGetAsync(cacheKey);
+
+      if (imageFromRedis) {
+        // If found in Redis, set the appropriate headers for download
+        res.setHeader('Content-Disposition', `attachment; filename=resized-image-${index}.jpg`);
+        res.setHeader('Content-Type', 'image/jpeg');
+        res.end(Buffer.from(imageFromRedis, 'base64'));
+      } else {
+        const imageFromS3Key = `resized-images/${index}.jpg`;
+
+        // Check S3 for the image
+        s3.getObject({ Bucket: bucketName, Key: imageFromS3Key }, (err, data) => {
+          if (data) {
+            const imageBuffer = data.Body;
+
+            // Save the image in Redis for future use
+            client.setEx(cacheKey, 3600, imageBuffer.toString('base64'));
+
+            // Set the appropriate headers for download
+            res.setHeader('Content-Disposition', `attachment; filename=resized-image-${index}.jpg`);
+            res.setHeader('Content-Type', 'image/jpeg');
+            res.end(imageBuffer);
+          } else {
+            // Handle cases where the image is not found in Redis or S3
+            res.status(404).send('Image not found');
+          }
+        });
+      }
+    } else {
+      // Handle cases where the image index is out of bounds or doesn't exist
+      res.status(404).send('Image not found');
+    }
+  } catch (error) {
+    // Handle any errors that may occur during the download
+    console.error(error);
+    res.status(500).send('Internal Server Error');
+  }
+});
+
 
 // Export the router module to be used in other parts of the application
 module.exports = router;
