@@ -54,11 +54,11 @@ router.get('/', function(req, res, next) {
   });
 });
 
-/* Endpoint to resize the uploaded image */
+// Endpoint to resize the uploaded image
 router.post('/resize', upload.single('image'), async function(req, res) {
   try {
     // If the session contains the default image, remove it before adding new images
-    if (req.session.uploadedImages && req.session.uploadedImages[0] === '../images/default.png') {
+    if (req.session.uploadedImages && req.session.uploadedImages[0] === '../images/default.jpg') {
       req.session.uploadedImages.shift();
     }
 
@@ -98,52 +98,44 @@ router.post('/resize', upload.single('image'), async function(req, res) {
 
     let outputBuffer = await sharpInstance.toBuffer();  // Get the resized image buffer
 
+    let cacheKey = `${req.body.width}-${req.body.height}-${req.file.originalname}`;
+
+    // Check if the image is in Redis; if not, check if it is in S3; if not, upload to both
+    const result = await client.get(cacheKey);
+    if (result) {
+      console.log(`Found in Redis Cache`);
+    } else {
+      try {
+        // Create an S3 upload parameters object
+        let uploadParams = {
+          Bucket: bucketName,
+          Key: 'resized-images/' + req.file.originalname,
+          ContentType: 'image/' + imageType
+        };
+
+        // Upload the image to AWS S3
+        let uploadResult = await s3.upload({
+          ...uploadParams,
+          Body: outputBuffer // Set the image data as Body
+        }).promise();
+
+        console.log(`Uploaded to S3`);
+        
+        // Upload to Redis cache
+        await client.setEx(cacheKey, 3600, outputBuffer.toString('base64'));
+        console.log(`Stored in Redis cache`);
+      } catch (error) {
+        console.error("Error in S3 operation:", error);
+      }
+    }
+
     // Check if the client wants the image as a download
     let download = req.body.download === 'on';
 
     if (download) {
-      let cacheKey = `${req.body.width}-${req.body.height}-${req.file.originalname}`;
-
-      let params = {
-        Bucket: bucketName,
-        Key: 'resized-images/' + req.file.originalname,
-        Body: outputBuffer,
-        ContentType: 'image/' + imageType
-      };
-      //check if image is in redis if not check if it is in s3 if not in both upload to
-      const result = await client.get(cacheKey);
-      if (result) {
-        console.log(`Found in Redis Cache`);
-        // server from Redis cache
-        res.setHeader('Content-Disposition', 'attachment; filename=resized-image.' + imageType);
-        res.setHeader('Content-Type', req.file.mimetype);
-        return res.end(outputBuffer);
-        // not found in Redis Cache
-      }
-      else{
-      // check AWS store
-      return new AWS.S3().getObject(params, (err, result) => {
-        if (result) {
-          console.log(`Found in S3`);
-          // upload to redis cache
-          redisClient.setEx(redisKey, 3600, outputBuffer.toString('base64'));
-          console.log(`Stored in Redis cache`);
-          res.setHeader('Content-Disposition', 'attachment; filename=resized-image.' + imageType);
-          res.setHeader('Content-Type', req.file.mimetype);
-          return res.end(outputBuffer);
-          // not found in S3 so save to redis and S3
-        } else {
-          console.log("Uploaded to S3 and redis");
-          let uploadResult = s3.upload(params).promise();
-          client.setEx(cacheKey, 3600, outputBuffer.toString('base64'));
-          // Set headers and send the resized image as a downloadable file
-          res.setHeader('Content-Disposition', 'attachment; filename=resized-image.' + imageType);
-          res.setHeader('Content-Type', req.file.mimetype);
-          return res.end(outputBuffer);
-        }
-        
-      })
-    }
+      res.setHeader('Content-Disposition', 'attachment; filename=resized-image.' + imageType);
+      res.setHeader('Content-Type', req.file.mimetype);
+      res.end(outputBuffer);
     } else {
       // Otherwise, render the page with the resized image (encoded in Base64 format)
       let outputBase64 = `data:image/${imageType};base64,` + outputBuffer.toString('base64');
@@ -153,7 +145,6 @@ router.post('/resize', upload.single('image'), async function(req, res) {
         uploadedImages: req.session.uploadedImages
       });
     }
-
   } catch (error) {
     // In case of errors, render the home page with an error message
     res.render('index', {
@@ -162,6 +153,9 @@ router.post('/resize', upload.single('image'), async function(req, res) {
     });
   }
 });
+
+
+
 
 const { promisify } = require('util');
 const redisGetAsync = promisify(client.get).bind(client);

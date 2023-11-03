@@ -80,23 +80,14 @@
             <!-- Display bar for previously uploaded images -->
             <h2 style="text-align: center; margin-top: 2%">Previous Uploads</h2>
             <div style="margin-top: 2%" class="row uploaded-images-bar">
-            {{#if uploadedImages.length}}
                 {{#each uploadedImages}}
-                <div class="col">
-                    <div class="image-container">
-                    <img src="{{this}}" alt="Uploaded Image {{@index}}" class="img-fluid">
+                    <div class="col">
+                        <div class="image-container">
+                            <img src="{{this}}" alt="Uploaded Image {{@index}}" class="img-fluid">
+                            <a href="/download/{{@index}}" class="btn btn-primary download-button">Download</a>
+                        </div>
                     </div>
-                    <a href="/download/{{@index}}" class="btn btn-primary download-button">Download</a>
-                </div>
                 {{/each}}
-            {{else}}
-                <!-- Display a default image if there are no uploaded images -->
-                <div class="col">
-                <div class="image-container">
-                    <img src="{{uploadedImages}}" alt="Default Image" class="img-fluid">
-                </div>
-                </div>
-            {{/if}}
             </div>
 
         </div>
