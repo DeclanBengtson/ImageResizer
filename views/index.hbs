@@ -20,7 +20,7 @@
                 <!-- Resize Adjustment Settings Section -->
                 <div class="col-md-6">
                     <!-- Form to post resize settings and the image to resize -->
-                    <form action="/resize" method="post" enctype="multipart/form-data" class="resize-options">
+                    <form action="/resize" method="post" enctype="multipart/form-data" class="resize-options" onsubmit="return validateForm()">
 
                         <!-- Hidden input to hold the current resized image path -->
                         <input type="hidden" name="currentImage" value="{{resizedImage}}">
@@ -60,7 +60,7 @@
                         </div>
 
                         <!-- Input to choose the image file to upload and resize -->
-                        <input type="file" name="image" accept="image/*" multiple>
+                        <input type="file" name="image" accept="image/*" id="imageFile" required>
 
                         <!-- Checkbox to decide if the image should be downloaded after resizing -->
                         <label for="aspectRatio">Download</label>
@@ -95,3 +95,15 @@
         </div>
     </div>
 </div>
+
+<!-- JavaScript to validate the file input -->
+<script>
+    function validateForm() {
+        const fileInput = document.getElementById('imageFile');
+        if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+            alert('Please select an image to resize.');
+            return false;
+        }
+        return true;
+    }
+</script>

@@ -68,7 +68,6 @@ router.get('/', function(req, res, next) {
 });
 
 // Endpoint to resize the uploaded image
-// Endpoint to resize the uploaded image
 router.post('/resize', upload.array('image', 10), async function(req, res) {
   try {
     // If the session contains the default image, remove it before adding new images
