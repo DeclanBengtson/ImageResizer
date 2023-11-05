@@ -39,6 +39,17 @@ a {
   align-items: center;
 }
 
+.image-download-wrapper {
+  display: flex;
+  flex-direction: column; /* Stacks children (image and button) vertically */
+  align-items: center; /* Aligns children in the center */
+  padding: 10px; /* Optional: adds some space around the wrapper */
+}
+
+.uploaded-images-bar .download-button {
+  margin-top: 10px; /* Add margin to space out the button from the image */
+}
+
 body, html {
   height: 100%;
 }

@@ -82,11 +82,9 @@
             <div style="margin-top: 2%" class="row uploaded-images-bar">
                 {{#if resizedImage}}
                     {{#each uploadedImages}}
-                        <div class="col">
-                            <div class="image-container">
-                                <img src="{{this}}" alt="Uploaded Image {{@index}}" class="img-fluid">
-                                <a href="/download/{{@index}}" class="btn btn-primary download-button">Download</a>
-                            </div>
+                        <div class="col image-download-wrapper">  <!-- Added wrapper div for image and button -->
+                            <img src="{{this}}" alt="Uploaded Image {{@index}}" class="img-fluid">
+                            <a href="/download/{{@index}}" class="btn btn-primary download-button">Download</a>
                         </div>
                     {{/each}}
                 {{else}}
