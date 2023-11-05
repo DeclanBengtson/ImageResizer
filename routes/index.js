@@ -42,6 +42,7 @@ const client = redis.createClient();
 })();
 
 const uploadedFileNames = []; // Array to store uploaded file names
+const uploadedImages = []; // Array to store uploaded images
 
 (async () => {
   try {
@@ -154,10 +155,11 @@ router.post('/resize', upload.single('image'), async function(req, res) {
     } else {
       // Otherwise, render the page with the resized image (encoded in Base64 format)
       let outputBase64 = `data:image/${imageType};base64,` + outputBuffer.toString('base64');
+      uploadedImages.push(`data:image/${imageType};base64,` + outputBuffer.toString('base64'));
       return res.render('index', {
         title: 'Cloud Resizer',
         resizedImage: outputBase64,
-        uploadedImages: req.session.uploadedImages
+        uploadedImages: uploadedImages
       });
     }
   } catch (error) {
