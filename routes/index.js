@@ -68,6 +68,7 @@ router.get('/', function(req, res, next) {
 });
 
 // Endpoint to resize the uploaded image
+// Endpoint to resize the uploaded image
 router.post('/resize', upload.single('image'), async function(req, res) {
   try {
     // If the session contains the default image, remove it before adding new images
@@ -79,7 +80,7 @@ router.post('/resize', upload.single('image'), async function(req, res) {
     if (!req.session.uploadedImages) {
       req.session.uploadedImages = [];
     }
-    req.session.uploadedImages.push('../images/' + req.file.originalname);
+    //req.session.uploadedImages.push('../images/' + req.file.originalname);
 
     // Extract and configure image parameters for resizing
     let imageBuffer = req.file.buffer;  // Buffer containing the uploaded image
@@ -122,7 +123,7 @@ router.post('/resize', upload.single('image'), async function(req, res) {
         // Create an S3 upload parameters object
         let uploadParams = {
           Bucket: bucketName,
-          Key: 'resized-images/' + req.file.originalname,
+          Key: `resized-images/${req.body.width}-${req.body.height}-${req.file.originalname}`, // Include width and height in the S3 Key
           ContentType: 'image/' + imageType
         };
 
@@ -155,7 +156,7 @@ router.post('/resize', upload.single('image'), async function(req, res) {
     } else {
       // Otherwise, render the page with the resized image (encoded in Base64 format)
       let outputBase64 = `data:image/${imageType};base64,` + outputBuffer.toString('base64');
-      uploadedImages.push(`data:image/${imageType};base64,` + outputBuffer.toString('base64'));
+      uploadedImages.push(outputBase64); // Store the resized image in the uploadedImages array
       return res.render('index', {
         title: 'Cloud Resizer',
         resizedImage: outputBase64,
@@ -170,7 +171,6 @@ router.post('/resize', upload.single('image'), async function(req, res) {
     });
   }
 });
-
 
 const { promisify } = require('util');
 const redisGetAsync = promisify(client.get).bind(client);
@@ -187,7 +187,7 @@ router.get('/download/:index', async function(req, res) {
       const imageFromRedis = await client.get(cacheKey);
       if (imageFromRedis) {
         console.log("cacheKey");
-        res.setHeader('Content-Disposition', `attachment; filename=resized-image-${index}.jpg`);
+        res.setHeader('Content-Disposition', `attachment; filename=resized-image-${fileName}`);
         res.setHeader('Content-Type', 'image/jpeg');
         res.end(Buffer.from(imageFromRedis, 'base64'));
       } else {
@@ -197,7 +197,7 @@ router.get('/download/:index', async function(req, res) {
           if (data) {
             const imageBuffer = data.Body;
             client.setEx(cacheKey, 3600, imageBuffer.toString('base64'));
-            res.setHeader('Content-Disposition', `attachment; filename=resized-image-${index}.jpg`);
+            res.setHeader('Content-Disposition', `attachment; filename=${imageFromS3Key}`); // Use the S3 Key with width and height
             res.setHeader('Content-Type', 'image/jpeg');
             res.end(imageBuffer);
           } else {
