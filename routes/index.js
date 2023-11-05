@@ -41,8 +41,20 @@ const client = redis.createClient();
   }
 })();
 
+const uploadedFileNames = []; // Array to store uploaded file names
+
+(async () => {
+  try {
+    await s3.createBucket({ Bucket: bucketName }).promise();
+    console.log(`Created bucket: ${bucketName}`);
+  } catch (err) {
+    if (err.statusCode !== 409) {
+      console.log(`Error creating bucket: ${err}`);
+    }
+  }
+})();
+
 router.get('/', function(req, res, next) {
-  // If session does not have uploadedImages, initialize with default image
   if (!req.session.uploadedImages) {
     req.session.uploadedImages = ['../images/default.jpg'];
     console.log("default");
@@ -120,6 +132,9 @@ router.post('/resize', upload.single('image'), async function(req, res) {
         }).promise();
 
         console.log(`Uploaded to S3`);
+
+        // Store the file name
+        uploadedFileNames.push(req.file.originalname);
         
         // Upload to Redis cache
         await client.setEx(cacheKey, 3600, outputBuffer.toString('base64'));
@@ -155,57 +170,46 @@ router.post('/resize', upload.single('image'), async function(req, res) {
 });
 
 
-
-
 const { promisify } = require('util');
 const redisGetAsync = promisify(client.get).bind(client);
 
-// Add this route handler for downloading images
 router.get('/download/:index', async function(req, res) {
   try {
     const index = parseInt(req.params.index);
 
-    if (req.session.uploadedImages && index >= 0 && index < req.session.uploadedImages.length) {
-      const cacheKey = `image-${index}`;
-      const imageFromRedis = await redisGetAsync(cacheKey);
+    if (index >= 0 && index < uploadedFileNames.length) {
+      const fileName = uploadedFileNames[index];
 
+      const cacheKey = `image-${fileName}`;
+      console.log(cacheKey);
+      const imageFromRedis = await client.get(cacheKey);
       if (imageFromRedis) {
-        // If found in Redis, set the appropriate headers for download
+        console.log("cacheKey");
         res.setHeader('Content-Disposition', `attachment; filename=resized-image-${index}.jpg`);
         res.setHeader('Content-Type', 'image/jpeg');
         res.end(Buffer.from(imageFromRedis, 'base64'));
       } else {
-        const imageFromS3Key = `resized-images/${index}.jpg`;
+        const imageFromS3Key = `resized-images/${fileName}`;
 
-        // Check S3 for the image
         s3.getObject({ Bucket: bucketName, Key: imageFromS3Key }, (err, data) => {
           if (data) {
             const imageBuffer = data.Body;
-
-            // Save the image in Redis for future use
             client.setEx(cacheKey, 3600, imageBuffer.toString('base64'));
-
-            // Set the appropriate headers for download
             res.setHeader('Content-Disposition', `attachment; filename=resized-image-${index}.jpg`);
             res.setHeader('Content-Type', 'image/jpeg');
             res.end(imageBuffer);
           } else {
-            // Handle cases where the image is not found in Redis or S3
             res.status(404).send('Image not found');
           }
         });
       }
     } else {
-      // Handle cases where the image index is out of bounds or doesn't exist
       res.status(404).send('Image not found');
     }
   } catch (error) {
-    // Handle any errors that may occur during the download
     console.error(error);
     res.status(500).send('Internal Server Error');
   }
 });
 
-
-// Export the router module to be used in other parts of the application
 module.exports = router;
