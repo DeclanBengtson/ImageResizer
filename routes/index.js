@@ -6,6 +6,7 @@ const upload = multer({ storage: storage });
 const fs = require('fs').promises;
 const AWS = require('aws-sdk');
 const redis = require('redis');
+const os = require('os'); // Import the os module for MAC address retrieval
 const router = express.Router();
 
 require('dotenv').config();
@@ -35,7 +36,7 @@ const s3 = new AWS.S3({ apiVersion: "2006-03-01" });
 const client = redis.createClient();
 (async () => {
   try {
-    await  client.connect();  
+    await client.connect();
   } catch (err) {
     console.log(err);
   }
@@ -43,20 +44,26 @@ const client = redis.createClient();
 
 const uploadedFileNames = []; // Array to store uploaded file names
 const uploadedImages = []; // Array to store uploaded images
-const cacheKeysArray = [];// Initialize an array to store cache keys in the resize router
+const cacheKeysArray = []; // Initialize an array to store cache keys in the resize router
 
-(async () => {
-  try {
-    await s3.createBucket({ Bucket: bucketName }).promise();
-    console.log(`Created bucket: ${bucketName}`);
-  } catch (err) {
-    if (err.statusCode !== 409) {
-      console.log(`Error creating bucket: ${err}`);
+// Function to get the first non-internal MAC address
+function getFirstMacAddress() {
+  const networkInterfaces = os.networkInterfaces();
+
+  for (const interfaceName of Object.keys(networkInterfaces)) {
+    const interfaces = networkInterfaces[interfaceName];
+
+    for (const iface of interfaces) {
+      if (!iface.internal && iface.mac !== '00:00:00:00:00:00') {
+        return iface.mac;
+      }
     }
   }
-})();
 
-router.get('/', function(req, res, next) {
+  throw new Error('No non-internal MAC address found.');
+}
+
+router.get('/', function (req, res, next) {
   if (!req.session.uploadedImages) {
     req.session.uploadedImages = ['../images/default.jpg'];
     console.log("default");
@@ -68,8 +75,7 @@ router.get('/', function(req, res, next) {
   });
 });
 
-// Endpoint to resize the uploaded image
-router.post('/resize', upload.single('image'), async function(req, res) {
+router.post('/resize', upload.single('image'), async function (req, res) {
   try {
     // If the session contains the default image, remove it before adding new images
     if (req.session.uploadedImages && req.session.uploadedImages[0] === '../images/default.jpg') {
@@ -82,17 +88,17 @@ router.post('/resize', upload.single('image'), async function(req, res) {
     }
 
     // Extract and configure image parameters for resizing
-    let imageBuffer = req.file.buffer;  // Buffer containing the uploaded image
-    let width = parseInt(req.body.width);  // Desired width for the resized image
-    let height = parseInt(req.body.height);  // Desired height for the resized image
-    let imageType = req.body.imageType || 'jpeg';  // Image type/format (default is jpeg)
-    let imageQuality = parseInt(req.body.imageQuality) || 90;  // Quality of the image (default is 90)
-    let maintainAspectRatio = req.body.maintainAspectRatio === 'on';  // Check if aspect ratio needs to be maintained
+    let imageBuffer = req.file.buffer; // Buffer containing the uploaded image
+    let width = parseInt(req.body.width); // Desired width for the resized image
+    let height = parseInt(req.body.height); // Desired height for the resized image
+    let imageType = req.body.imageType || 'jpeg'; // Image type/format (default is jpeg)
+    let imageQuality = parseInt(req.body.imageQuality) || 90; // Quality of the image (default is 90)
+    let maintainAspectRatio = req.body.maintainAspectRatio === 'on'; // Check if aspect ratio needs to be maintained
 
     // Define the resize options
     let resizeOptions = {
       width: width,
-      fit: maintainAspectRatio ? sharp.fit.inside : sharp.fit.fill  // Resize strategy based on aspect ratio preference
+      fit: maintainAspectRatio ? sharp.fit.inside : sharp.fit.fill // Resize strategy based on aspect ratio preference
     };
     if (height) {
       resizeOptions.height = height;
@@ -109,44 +115,47 @@ router.post('/resize', upload.single('image'), async function(req, res) {
       sharpInstance = sharpInstance.gif();
     }
 
-    let outputBuffer = await sharpInstance.toBuffer();  // Get the resized image buffer
+    let outputBuffer = await sharpInstance.toBuffer(); // Get the resized image buffer
 
-    let cacheKey = `${req.body.width}-${req.body.height}-${req.file.originalname}`;
-    // Add the cache key to the array
-    cacheKeysArray.push(cacheKey);
-    console.log(cacheKey);
+    // Use this function to get the MAC address
+    try {
+      const macAddress = getFirstMacAddress();
 
+      // Modify the cache key to include the MAC address
+      let cacheKey = `${macAddress}-${req.body.width}-${req.body.height}-${req.file.originalname}`;
+      // Add the cache key to the array
+      cacheKeysArray.push(cacheKey);
+      console.log(cacheKey);
 
-    // Check if the image is in Redis; if not, check if it is in S3; if not, upload to both
-    const result = await client.get(cacheKey);
-    if (result) {
-      console.log(`Found in Redis Cache`);
-    } else {
-      try {
+      // Check if the image is in Redis; if not, check if it is in S3; if not, upload to both
+      const result = await client.get(cacheKey);
+      if (result) {
+        console.log(`Found in Redis Cache`);
+      } else {
         // Create an S3 upload parameters object
         let uploadParams = {
           Bucket: bucketName,
           Key: `resized-images/${req.body.width}-${req.body.height}-${req.file.originalname}`, // Include width and height in the S3 Key
-          ContentType: 'image/' + imageType
+          ContentType: 'image/' + imageType,
         };
 
         // Upload the image to AWS S3
         let uploadResult = await s3.upload({
           ...uploadParams,
-          Body: outputBuffer // Set the image data as Body
+          Body: outputBuffer, // Set the image data as Body
         }).promise();
 
         console.log(`Uploaded to S3`);
 
         // Store the file name
         uploadedFileNames.push(req.file.originalname);
-        
+
         // Upload to Redis cache
         await client.setEx(cacheKey, 3600, outputBuffer.toString('base64'));
         console.log(`Stored in Redis cache`);
-      } catch (error) {
-        console.error("Error in S3 operation:", error);
       }
+    } catch (error) {
+      console.error("Could not retrieve the MAC address:", error);
     }
 
     // Check if the client wants the image as a download
@@ -215,6 +224,5 @@ router.get('/download/:index', async function (req, res) {
     res.status(500).send('Internal Server Error');
   }
 });
-
 
 module.exports = router;
