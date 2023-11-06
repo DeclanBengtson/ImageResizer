@@ -8,6 +8,7 @@ const AWS = require('aws-sdk');
 const redis = require('redis');
 const os = require('os');
 const router = express.Router();
+const archiver = require('archiver');
 
 require('dotenv').config();
 
@@ -70,6 +71,7 @@ router.post('/resize', upload, async function (req, res) {
       req.session.uploadedImages = [];
     }
 
+    let buffers = [];
     let imagesProcessed = [];
     const macAddress = getFirstMacAddress();
 
@@ -92,6 +94,7 @@ router.post('/resize', upload, async function (req, res) {
       if (imageType === 'gif') sharpInstance = sharpInstance.gif();
 
       let outputBuffer = await sharpInstance.toBuffer();
+      buffers.push({ buffer: outputBuffer, type: imageType, name: file.originalname }); // Store the buffer along with the image type and name
 
       let cacheKey = `${macAddress}-${width}-${height}-${file.originalname}`;
       cacheKeysArray.push(cacheKey);
@@ -124,11 +127,30 @@ router.post('/resize', upload, async function (req, res) {
 
     let download = req.body.download === 'on';
     if (download) {
-      // If multiple files, consider zipping them before sending
-      // This example assumes single file download, which needs to be adjusted
-      res.setHeader('Content-Disposition', 'attachment; filename=resized-image.' + imageType);
-      res.setHeader('Content-Type', 'image/' + imageType);
-      res.end(outputBuffer);
+      if (buffers.length === 1) {
+        // Single file download
+        let file = buffers[0];
+        res.setHeader('Content-Disposition', 'attachment; filename=resized-' + file.name);
+        res.setHeader('Content-Type', 'image/' + file.type);
+        res.end(file.buffer);
+      } else {
+        // Multiple file download
+        let archive = archiver('zip', { zlib: { level: 9 } }); // Sets the compression level.
+        res.setHeader('Content-Disposition', 'attachment; filename="resized-images.zip"');
+        res.setHeader('Content-Type', 'application/zip');
+        archive.pipe(res);
+
+        buffers.forEach(file => {
+          archive.append(file.buffer, { name: 'resized-' + file.name });
+        });
+
+        archive.finalize().catch(err => {
+          console.error('Archiving failed', err);
+          res.status(500).send('Error in downloading files');
+        });
+
+        return; // Ensure that the rest of the function doesn't execute
+      }
     } else {
       res.render('index', {
         title: 'Cloud Resizer',
