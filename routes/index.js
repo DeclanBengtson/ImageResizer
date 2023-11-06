@@ -2,10 +2,11 @@ const express = require('express');
 const sharp = require('sharp');
 const multer = require('multer');
 const storage = multer.memoryStorage();
-const upload = multer({ storage: storage });
+const upload = multer({ storage: storage }).array('image', 10); // Adjust '10' to the max number of files you want to allow
+const fs = require('fs').promises;
 const AWS = require('aws-sdk');
 const redis = require('redis');
-const JSZip = require('jszip');
+const os = require('os');
 const router = express.Router();
 
 require('dotenv').config();
@@ -20,141 +21,122 @@ AWS.config.update({
 const bucketName = 'n11079550bucket';
 const s3 = new AWS.S3({ apiVersion: "2006-03-01" });
 
-(async () => {
-  try {
-    await s3.createBucket({ Bucket: bucketName }).promise();
-    console.log(`Created bucket: ${bucketName}`);
-  } catch (err) {
-    // We will ignore 409 errors which indicate that the bucket already exists
-    if (err.statusCode !== 409) {
-      console.log(`Error creating bucket: ${err}`);
-    }
-  }
-})();
+// S3 bucket creation is not included here. Ensure you handle this in your actual application.
 
 const client = redis.createClient();
 (async () => {
   try {
-    await  client.connect();
+    await client.connect();
   } catch (err) {
     console.log(err);
   }
 })();
 
-const uploadedFileNames = []; // Array to store uploaded file names
-const uploadedImages = []; // Array to store uploaded images
+// Store uploaded file names and images
+const uploadedFileNames = [];
+const uploadedImages = [];
+const cacheKeysArray = [];
 
-(async () => {
-  try {
-    await s3.createBucket({ Bucket: bucketName }).promise();
-    console.log(`Created bucket: ${bucketName}`);
-  } catch (err) {
-    if (err.statusCode !== 409) {
-      console.log(`Error creating bucket: ${err}`);
+function getFirstMacAddress() {
+  const networkInterfaces = os.networkInterfaces();
+  for (const interfaceName of Object.keys(networkInterfaces)) {
+    const interfaces = networkInterfaces[interfaceName];
+    for (const iface of interfaces) {
+      if (!iface.internal && iface.mac !== '00:00:00:00:00:00') {
+        return iface.mac;
+      }
     }
   }
-})();
+  throw new Error('No non-internal MAC address found.');
+}
 
-router.get('/', function(req, res, next) {
+router.get('/', function (req, res, next) {
   if (!req.session.uploadedImages) {
     req.session.uploadedImages = ['../images/default.jpg'];
-    console.log("default");
   }
-
   res.render('index', {
     title: 'Express',
     uploadedImages: req.session.uploadedImages,
   });
 });
 
-// Endpoint to resize the uploaded image
-// Endpoint to resize the uploaded image
-router.post('/resize', upload.array('images', 10), async function(req, res) {
+router.post('/resize', upload, async function (req, res) {
   try {
-    // If the session doesn't contain uploadedImages, initialize it
+    if (req.session.uploadedImages && req.session.uploadedImages[0] === '../images/default.jpg') {
+      req.session.uploadedImages.shift();
+    }
+
     if (!req.session.uploadedImages) {
-      req.session.uploadedImages = [];
-    } else if (req.session.uploadedImages.includes('../images/default.jpg')) {
-      // If the session contains the default image, remove it before adding new images
       req.session.uploadedImages = [];
     }
 
     let imagesProcessed = [];
+    const macAddress = getFirstMacAddress();
 
-    // Use Promise.all to wait for all images to be processed
-    await Promise.all(req.files.map(async file => {
-      let imageBuffer = file.buffer; // Buffer containing the uploaded image
-      let width = parseInt(req.body.width); // Desired width for the resized image
-      let height = parseInt(req.body.height); // Desired height for the resized image
-      let imageType = req.body.imageType || 'jpeg'; // Image type/format (default is jpeg)
-      let imageQuality = parseInt(req.body.imageQuality) || 90; // Quality of the image (default is 90)
-      let maintainAspectRatio = req.body.maintainAspectRatio === 'on'; // Check if aspect ratio needs to be maintained
+    for (const file of req.files) {
+      let width = parseInt(req.body.width);
+      let height = parseInt(req.body.height);
+      let imageType = req.body.imageType || 'jpeg';
+      let imageQuality = parseInt(req.body.imageQuality) || 90;
+      let maintainAspectRatio = req.body.maintainAspectRatio === 'on';
 
-      // Define the resize options
       let resizeOptions = {
         width: width,
-        fit: maintainAspectRatio ? sharp.fit.inside : sharp.fit.fill, // Resize strategy based on aspect ratio preference
+        fit: maintainAspectRatio ? sharp.fit.inside : sharp.fit.fill
       };
-      if (height) {
-        resizeOptions.height = height;
-      }
+      if (height) resizeOptions.height = height;
 
-      // Use Sharp to process and resize the image
-      let sharpInstance = sharp(imageBuffer).resize(resizeOptions);
-      if (imageType === 'jpeg') {
-        sharpInstance = sharpInstance.jpeg({ quality: imageQuality });
-      } else if (imageType === 'png') {
-        sharpInstance = sharpInstance.png({ quality: imageQuality });
-      } else if (imageType === 'webp') {
-        sharpInstance = sharpInstance.webp({ quality: imageQuality });
-      }
+      let sharpInstance = sharp(file.buffer).resize(resizeOptions);
+      if (imageType === 'jpeg') sharpInstance = sharpInstance.jpeg({ quality: imageQuality });
+      if (imageType === 'png') sharpInstance = sharpInstance.png();
+      if (imageType === 'gif') sharpInstance = sharpInstance.gif();
 
-      let outputBuffer = await sharpInstance.toBuffer(); // Get the resized image buffer
+      let outputBuffer = await sharpInstance.toBuffer();
 
-      // Generate a cache key and file name
-      let cacheKey = `${width}-${height}-${file.originalname}`;
-      let resizedFileName = `resized-${width}x${height}-${file.originalname}`;
+      let cacheKey = `${macAddress}-${width}-${height}-${file.originalname}`;
+      cacheKeysArray.push(cacheKey);
 
-      // Attempt to retrieve the image from the Redis cache
       const result = await client.get(cacheKey);
-      if (!result) {
-        // If not found in cache, upload to S3 and then cache
+      if (result) {
+        console.log(`Found in Redis Cache`);
+        imagesProcessed.push(`data:image/${imageType};base64,${result}`);
+      } else {
         let uploadParams = {
           Bucket: bucketName,
-          Key: `resized-images/${resizedFileName}`, // Include width and height in the S3 Key
+          Key: `resized-images/${macAddress}-${width}-${height}-${file.originalname}`,
+          ContentType: 'image/' + imageType,
           Body: outputBuffer,
-          ContentType: `image/${imageType}`
         };
 
-        await s3.upload(uploadParams).promise();
-        await client.setEx(cacheKey, 3600, outputBuffer.toString('base64'));
+        let uploadResult = await s3.upload(uploadParams).promise();
+        console.log(`Uploaded to S3`);
+
+        uploadedFileNames.push(file.originalname);
+
+        const base64Image = outputBuffer.toString('base64');
+        await client.setEx(cacheKey, 3600, base64Image);
+        console.log(`Stored in Redis cache`);
+        imagesProcessed.push(`data:image/${imageType};base64,${base64Image}`);
       }
+    }
 
-      // Add the resized image's buffer and type to the array for rendering or downloading
-      imagesProcessed.push({
-        buffer: outputBuffer,
-        type: imageType,
-        name: resizedFileName
-      });
+    req.session.uploadedImages.push(...imagesProcessed);
 
-      // Add the image path to the session
-      req.session.uploadedImages.push(`../images/${resizedFileName}`);
-    }));
-
-    // Check if the client wants the images as a download
     let download = req.body.download === 'on';
     if (download) {
-      // Code for bundling the images into a zip for download will go here
-      // ...
+      // If multiple files, consider zipping them before sending
+      // This example assumes single file download, which needs to be adjusted
+      res.setHeader('Content-Disposition', 'attachment; filename=resized-image.' + imageType);
+      res.setHeader('Content-Type', 'image/' + imageType);
+      res.end(outputBuffer);
     } else {
-      // Render the page with all resized images
       res.render('index', {
         title: 'Cloud Resizer',
+        resizedImage: imagesProcessed[0], // This will only show the first image, adjust as needed
         uploadedImages: req.session.uploadedImages
       });
     }
   } catch (error) {
-    console.error('An error occurred:', error);
     res.render('index', {
       title: 'Cloud Resizer',
       error: error.message
@@ -165,29 +147,28 @@ router.post('/resize', upload.array('images', 10), async function(req, res) {
 const { promisify } = require('util');
 const redisGetAsync = promisify(client.get).bind(client);
 
-router.get('/download/:index', async function(req, res) {
+router.get('/download/:index', async function (req, res) {
   try {
     const index = parseInt(req.params.index);
 
     if (index >= 0 && index < uploadedFileNames.length) {
       const fileName = uploadedFileNames[index];
+      const cacheKey = cacheKeysArray[index];
 
-      const cacheKey = `image-${fileName}`;
-      console.log(cacheKey);
       const imageFromRedis = await client.get(cacheKey);
+
       if (imageFromRedis) {
-        console.log("cacheKey");
         res.setHeader('Content-Disposition', `attachment; filename=resized-image-${fileName}`);
         res.setHeader('Content-Type', 'image/jpeg');
         res.end(Buffer.from(imageFromRedis, 'base64'));
       } else {
-        const imageFromS3Key = `resized-images/${fileName}`;
+        const imageFromS3Key = `resized-images/${cacheKey}`;
 
         s3.getObject({ Bucket: bucketName, Key: imageFromS3Key }, (err, data) => {
           if (data) {
             const imageBuffer = data.Body;
             client.setEx(cacheKey, 3600, imageBuffer.toString('base64'));
-            res.setHeader('Content-Disposition', `attachment; filename=${imageFromS3Key}`); // Use the S3 Key with width and height
+            res.setHeader('Content-Disposition', `attachment; filename=${imageFromS3Key}`);
             res.setHeader('Content-Type', 'image/jpeg');
             res.end(imageBuffer);
           } else {
