@@ -135,7 +135,7 @@ router.post('/resize', upload.single('image'), async function (req, res) {
         // Create an S3 upload parameters object
         let uploadParams = {
           Bucket: bucketName,
-          Key: `resized-images/${req.body.width}-${req.body.height}-${req.file.originalname}`, // Include width and height in the S3 Key
+          Key: `resized-images/$${macAddress}-${req.body.width}-${req.body.height}-${req.file.originalname}`, // Include width and height in the S3 Key
           ContentType: 'image/' + imageType,
         };
 
