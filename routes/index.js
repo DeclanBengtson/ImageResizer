@@ -185,7 +185,6 @@ router.get('/download/:index', async function (req, res) {
         res.end(Buffer.from(imageFromRedis, 'base64'));
       } else {
         const imageFromS3Key = `resized-images/${cacheKey}`;
-
         s3.getObject({ Bucket: bucketName, Key: imageFromS3Key }, (err, data) => {
           if (data) {
             const imageBuffer = data.Body;
