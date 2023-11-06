@@ -22,7 +22,21 @@ AWS.config.update({
 const bucketName = 'n11079550bucket';
 const s3 = new AWS.S3({ apiVersion: "2006-03-01" });
 
-// S3 bucket creation is not included here. Ensure you handle this in your actual application.
+// Function to create the S3 bucket if it doesn't exist
+async function createBucket() {
+  try {
+    await s3.createBucket({ Bucket: bucketName }).promise();
+    console.log(`Created bucket: ${bucketName}`);
+  } catch (err) {
+    // Handle errors, and ignore if the bucket already exists (status code 409)
+    if (err.statusCode !== 409) {
+      console.error(`Error creating bucket: ${err}`);
+    }
+  }
+}
+
+// Ensure the S3 bucket is created
+createBucket();
 
 const client = redis.createClient();
 (async () => {
